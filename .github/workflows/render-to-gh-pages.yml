@@ -1,0 +1,54 @@
+name: Render ZIPs to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+# Allow the job to write back to the repository (push to gh-pages).
+permissions:
+  contents: write
+
+# Only one deployment at a time; never cancel an in-progress run so the
+# gh-pages branch always ends up in a consistent state.
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  render-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v16
+
+      - name: Restore Nix store cache
+        id: nix-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/nix-closure
+          key: nix-devshell-${{ runner.os }}-${{ hashFiles('flake.lock', 'flake.nix') }}
+
+      - name: Import cached Nix store paths
+        if: steps.nix-cache.outputs.cache-hit == 'true'
+        run: nix-store --import < /tmp/nix-closure/store.nar
+
+      - name: Render ZIPs and publish to gh-pages
+        run: nix develop --profile /tmp/dev-profile --command bash render-to-gh-pages.sh
+
+      - name: Export Nix store for caching
+        if: steps.nix-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p /tmp/nix-closure
+          nix-store --export $(nix-store -qR /tmp/dev-profile) > /tmp/nix-closure/store.nar
