@@ -1,0 +1,6 @@
+# Rendered output – added to gh-pages branch, not main
+rendered/
+
+# Nix build outputs
+result
+result-*
